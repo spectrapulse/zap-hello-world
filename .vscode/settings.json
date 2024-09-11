@@ -1,0 +1,5 @@
+{
+    "yaml.schemas": {
+        "https://json.schemastore.org/github-action.json": "file:///workspaces/zap-hello-world/.github/container-images.yml"
+    }
+}

@@ -1,0 +1,69 @@
+name: build container images
+
+on:
+  push:
+
+permissions:
+  packages: write
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-20.04
+    strategy:
+      fail-fast: true
+      matrix:
+        arch: [amd64, arm64v8]
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            target: x86_64-linux
+          - arch: arm64v8
+            platform: linux/arm64
+            target: aarch64-linux
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/metadata-action@v5
+        id: metadata
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=${{ matrix.arch }},enable={{is_default_branch}}
+            type=sha,enable=true,prefix=${{ matrix.arch }}-
+            type=sha,format=long,enable=true,prefix=${{ matrix.arch }}-
+      - uses: goto-bus-stop/setup-zig@v2.2.0
+        with:
+          version: "0.13.0"
+      - run: zig build --summary all -O ReleaseSafe -fsingle-threaded -target ${{ matrix.target }}
+      - uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.ci
+          platforms: ${{ matrix.platform }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.metadata.outputs.tags }}
+          labels: ${{ steps.metadata.outputs.labels}}
+
+  merge:
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-20.04
+    needs: [build]
+    env:
+      IMAGE_NAME: ghcr.io/${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - run: |
+          docker manifest create ${IMAGE_NAME}:latest --ammend ${IMAGE_NAME}:{amd64,arm64v8}
+          docker manifest create ${IMAGE_NAME}:${GITHUB_SHA} --ammend ${IMAGE_NAME}:{amd64,arm64v8}-${GITHUB_SHA} 
+          docker manifest create ${IMAGE_NAME}:${GITHUB_SHA::7} --ammend ${IMAGE_NAME}:{amd64,arm64v8}-${GITHUB_SHA::7}
+          docker manifest push ${IMAGE_NAME}:{latest,${GITHUB_SHA},${GITHUB_SHA::7}}

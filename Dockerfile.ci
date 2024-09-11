@@ -1,0 +1,4 @@
+FROM scratch
+WORKDIR /
+COPY ./zig-out/bin/zap-hello-world /
+ENTRYPOINT ["/zap-hello-world"]
