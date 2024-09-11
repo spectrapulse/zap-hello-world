@@ -1,4 +1,5 @@
-FROM scratch
+FROM busybox:latest
 WORKDIR /
+RUN mkdir -p /tmp
 COPY ./zig-out/bin/zap-hello-world /
 ENTRYPOINT ["/zap-hello-world"]
